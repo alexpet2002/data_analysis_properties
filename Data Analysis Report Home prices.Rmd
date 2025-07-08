@@ -1,0 +1,675 @@
+---
+output:
+  pdf_document:
+    includes:
+      before_body: cover.tex
+    latex_engine: xelatex
+    keep_tex: true
+    pandoc_args: ["--variable=fontsize:10pt", "--variable=linestretch=1.5"]
+geometry: margin=1in
+mainfont: "Times New Roman"
+lang: el
+header-includes:
+  - \usepackage{booktabs}
+  - \usepackage{caption}
+  - \usepackage{array}
+  - \usepackage{longtable}
+  - \usepackage{graphicx}
+  - \usepackage{float}
+---
+    
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  warning = FALSE,
+  message = FALSE,
+  echo = FALSE    
+)
+```
+
+\section*{Εισαγωγή – Περιγραφή Μελέτης και Προβλήματος}
+
+Σκοπός της μελέτης είναι η διερεύνηση των χαρακτηριστικών ενός ακινήτου που επηρεάζουν την τιμή πώλησής του και η πρόβλεψη της αναμενόμενης αξίας μεταπώλησης ενός σπιτιού με βάση τα συγκεκριμένα χαρακτηριστικά.
+
+Για την εξαγωγή της μελέτης επιλέχθηκε σετ δεδομένων που αποτελείται από τυχαίο δείγμα 117 σπιτιών στην πόλη του Albuquerque, στο Νέο Μεξικό των ΗΠΑ. Τα στοιχεία καταγράφηκαν στο διάστημα μεταξύ 15 Φεβρουαρίου και 30 Απριλίου του 1993. Το σετ περιλαμβάνει πληροφορίες για την τιμή πώλησης του ακινήτου, την ετήσια φορολόγηση του, καθώς και διάφορα άλλα χαρακτηριστικά σπιτιών που καταγράφηκαν.
+
+
+```{r imports, echo=FALSE,warning=FALSE}
+library(foreign)
+library(naniar)
+library(gt)
+library(dplyr)
+library(ggplot2)
+library(sjmisc)
+library(sysfonts)
+library(showtext)
+library(car)
+```
+
+
+```{r dataframe, results='hide'}
+dataframe <- read.spss("09_homeprices.sav", to.data.frame = TRUE)
+dataframe
+```
+
+
+```{r, results='asis',echo=FALSE, out.width="80%", fig.align='center'}
+library(knitr)
+library(kableExtra)
+
+df <- data.frame(
+  "Όνομα" = c("price", "sqft", "age", "feats", "ne", "cor", "resale", "tax"),
+  "Τύπος Μεταβλητής" = c(
+    "αριθμητική", "αριθμητική", "αριθμητική", "αριθμητική",
+    "κατηγορική", "κατηγορική", "κατηγορική", "αριθμητική"
+  ),
+  "Σημασία" = c(
+    "Αξία πώλησης (χιλιάδες δολάρια)",
+    "Εσωτερικό μέγεθος σπιτιού (τετραγωνικά πόδια)",
+    "Ηλικία σπιτιού (έτη)",
+    "Αριθμός χαρακτηριστικών (π.χ. πλυντήριο, ψυγείο κλπ.)",
+    "Το σπίτι βρίσκεται στην ΒΑ πλευρά της πόλης",
+    "Το σπίτι είναι γωνιακό",
+    "Έχει πουληθεί ξανά στο παρελθόν",
+    "Ετήσιος φόρος (δολάρια)"
+  ),
+  "Τιμές" = c(
+    "", "", "", "0 – 11",
+    "0: όχι, 1: ναι", "0: όχι, 1: ναι", "0: όχι, 1: ναι", ""
+  ),
+  check.names = FALSE
+)
+
+kable(df, "latex", booktabs = TRUE, longtable = TRUE, caption = "Πίνακας Δεδομένων") %>%
+  kable_styling(latex_options = c("hold_position")) %>%
+  row_spec(0, bold = TRUE)
+
+```
+
+\section*{Περιγραφική Ανάλυση}
+
+Για να εξετάσουμε τα βασικά χαρακτηριστικά των ποσοτικών μεταβλητών που περιλαμβάνονται στο σύνολο δεδομένων μας, ξεκινάμε με μία περιγραφική ανάλυση. Χρησιμοποιούμε στατιστικά μέτρα όπως η μέση τιμή, η διάμεσος, η τυπική απόκλιση και η ασυμμετρία για να αποκτήσουμε μία πρώτη εικόνα για την κατανομή των τιμών. Παρακάτω παρουσιάζονται τέσσερις μεταβλητές: PRICE, SQFT, AGE και TAX, όπως φαίνονται και στον Πίνακα 2.
+
+Ξεκινώντας με τη μεταβλητή PRICE, η οποία αντιπροσωπεύει την τιμή των ακινήτων, βλέπουμε ότι υπάρχουν συνολικά 117 παρατηρήσεις και δεν υπάρχουν καθόλου απούσες τιμές. Η μέση τιμή είναι 1062.74, ενώ η διάμεσος είναι μικρότερη (960), κάτι που μας δείχνει ότι υπάρχουν μερικές υψηλότερες τιμές που τραβούν τη μέση τιμή προς τα πάνω. Αυτό επιβεβαιώνεται και από τη θετική τιμή της ασυμμετρίας (1.38), η οποία υποδηλώνει δεξιά κατανομή. Το εύρος τιμών είναι μεγάλο (540 έως 2150), ενώ και το ενδοτεταρτημοριακό εύρος είναι 420, δείχνοντας σημαντική διασπορά στις τιμές.
+
+Η μεταβλητή SQFT, που αναφέρεται στα τετραγωνικά μέτρα των ακινήτων, επίσης περιλαμβάνει 117 παρατηρήσεις χωρίς απουσίες. Η μέση τιμή είναι 1653.85 και η διάμεσος είναι 1549, επομένως και εδώ υπάρχει μια ελαφρά δεξιά ασυμμετρία (skew = 1.19). Οι τιμές κυμαίνονται από 837 έως 3750, με IQR ίσο με 614, δείχνοντας και πάλι ότι υπάρχει σημαντική μεταβλητότητα στο μέγεθος των ακινήτων.
+
+Στην περίπτωση της AGE, που αφορά την ηλικία των ακινήτων, παρατηρούμε ότι υπάρχουν αρκετές απούσες τιμές (περίπου 42% των παρατηρήσεων λείπουν). Από τις τιμές που διαθέτουμε, η μέση ηλικία είναι 14.97 έτη και η διάμεσος είναι ελαφρώς μικρότερη (13 έτη), ενώ και εδώ εντοπίζεται δεξιά ασυμμετρία (1.27). Το εύρος ηλικιών είναι από 1 έως 53 έτη, με IQR ίσο με 13.5.
+
+Τέλος, η μεταβλητή TAX, η οποία αναφέρεται στον φόρο ακινήτου, έχει 107 παρατηρήσεις, με ένα ποσοστό απουσιών περίπου 8.5%. Η μέση τιμή είναι 793.49, ενώ η διάμεσος είναι λίγο μικρότερη (731), δείχνοντας και εδώ ήπια δεξιά ασυμμετρία (skew = 1.06). Το εύρος τιμών είναι από 223 έως 1765 και το IQR είναι 319, που δείχνει επίσης αρκετή διακύμανση.
+
+Παρατηρούμε λοιπόν ότι και οι τέσσερις ποσοτικές μεταβλητές παρουσιάζουν δεξιά ασυμμετρία,αυτό τονίζεται και διαγραμματικά βλ. σχήμα 1, κάτι που σημαίνει ότι υπάρχουν υψηλές τιμές που επηρεάζουν τη μορφή της κατανομής. Αν και δεν μπορούμε να πούμε με βεβαιότητα ότι οι κατανομές τους αποκλίνουν έντονα από την κανονική, η παρουσία ασυμμετρίας αποτελεί ένδειξη ότι ίσως χρειάζεται μετασχηματισμός των δεδομένων σε επόμενα στάδια της ανάλυσης.
+
+
+Η περιγραφική ανάλυση των κατηγορικών μεταβλητών δείχνει πως οι μεταβλητές AREA, COR και RESALE δεν έχουν ομοιόμορφη κατανομη. Η μεταβλητή \textbf{FEATS} (αριθμός παροχών ή χαρακτηριστικών) εμφανίζει κατανομή τύπου καμπάνας, με τη συχνότερη τιμή να είναι τα \textbf{4 χαρακτηριστικά}, ενώ οι περισσότερες κατοικίες διαθέτουν από 3 έως 5. Τιμές μικρότερες του 2 και μεγαλύτερες του 6 εμφανίζονται σπάνια, κάτι που υποδεικνύει συμμετρική κατανομή γύρω από τη μέση τιμή. Η μεταβλητή \textbf{AREA}, η οποία πιθανώς υποδεικνύει κατηγορία ζώνης, παρουσιάζει \textbf{ασύμμετρη κατανομή}, καθώς η πλειοψηφία των παρατηρήσεων ανήκει στην κατηγορία 1. Η μεταβλητή \textbf{COR}, που πιθανότατα σχετίζεται με γωνιακότητα οικοπέδου, δείχνει ότι περίπου τα δύο τρίτα των κατοικιών \textbf{δεν είναι γωνιακά} (COR = 0), ενώ το υπόλοιπο ένα τρίτο αφορά γωνιακά ακίνητα. Παρομοίως, η μεταβλητή \textbf{RESALE}, που δηλώνει αν ένα ακίνητο αποτελεί μεταπώληση ή όχι, καταγράφει σαφή υπεροχή της τιμής 0, δηλαδή \textbf{πρωτογενείς πωλήσεις}, έναντι των μεταπωλήσεων. Συνολικά, οι μεταβλητές \textbf{AREA}, \textbf{COR} και \textbf{RESALE} είναι ανισοκατανεμημένες, γεγονός που θα πρέπει να ληφθεί υπόψη στην επόμενη φάση του υποδείγματος, καθώς η μειωμένη ποικιλία κατηγοριών ενδέχεται να επηρεάσει τη στατιστική ισχύ. Από την άλλη, η μεταβλητή \textbf{FEATS} εμφανίζει ισορροπημένη κατανομή και πιθανόν να συμβάλει σημαντικά στην ερμηνεία της τιμής του ακινήτου (\texttt{PRICE}).
+
+Η περιγραφική ανάλυση των κατηγορικών μεταβλητών δείχνει πως οι μεταβλητές \textbf{AREA}, \textbf{COR} και RESALE δεν έχουν ομοιόμορφη κατανομη με κάποιες κατηγορίες να κυριαρχούν. Αυτό μπορεί να έχει επίπτωση στη στατιστική ισχύ κατά την ενταξή τους σε μοντέλο πρόβλεψης. Αντίθετα, η μεταβλητή \textbf{FEATS} παρουσιάζει αρκετά κανονική κατανομή και θα μπορούσε να έχει σημαντική ερμηνευτική αξία, εφόσον εξεταστεί στατιστικά με την τιμή,για λεπτομέρειες βλ. σχήμα 2 στο Παράρτημα.
+
+
+
+```{r desc,echo=FALSE, fig.cap="Πίνακας περιγραφικών μέτρων ποσοτικών μεταβλητών", out.width="80%", fig.align='center',warning=FALSE}
+library(knitr)
+library(dplyr)
+library(sjmisc)
+library(tibble)
+
+# Get summary and clean it
+descr_dataframe <- dataframe %>%
+  select(-COR, -RESALE, -AREA, -FEATS) %>%
+  sjmisc::descr() %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "Μεταβλητή") %>%
+  select(-var, -type)
+
+# Render clean LaTeX table
+kable(descr_dataframe,
+      format = "latex",
+      booktabs = TRUE,
+      digits = 2,
+      caption = "Πίνακας περιγραφικών μέτρων ποσοτικών μεταβλητών")
+
+
+```
+
+Οι πληροφορίες αυτές είναι χρήσιμες προκειμένου να αποφασίσουμε ποιοι στατιστικοι ελεγχοι είναι κατάλληλοι για τις συγκεκριμένες μεταβλητές. Στην μεταβλητή AGE συγκεντρώσαμε έναν μεγάλο αριθμό άγνωστων/ελλιπών τιμών βλ. πίνακα 5. Θα εξετάσουμε όλο το σετ δεδομένων για παρουσία τέτοιων τιμών.
+
+Στον παρακάτω πίνακα (βλ. πίνακας 3) παρατηρούμε ότι υπάρχουν ελλιπείς τιμές σε δύο μεταβλητές: στην AGE και στην TAX.Το ποσοστό αυτών αντιστοιχεί στο 41.9% των παρατηρήσεων και 8.55% αντίστοιχα.
+
+Η ύπαρξη τόσο μεγάλου ποσοστού ελλιπών τιμών στη μεταβλητή AGE αποτελεί πρόβλημα για την ανάλυση. Αν διατηρήσουμε αυτή τη μεταβλητή και επιλέξουμε να αναλύσουμε μόνο τις παρατηρήσεις όπου υπάρχουν διαθέσιμες τιμές για όλες τις μεταβλητές (μέθοδος listwise deletion), τότε αυτομάτως χάνουμε σχεδόν τις μισές παρατηρήσεις. Αυτό μπορεί να μειώσει τη στατιστική ισχύ της ανάλυσής μας, καθώς και να δημιουργήσει σφάλμα στα αποτελέσματα, εάν οι τιμές που λείπουν δεν είναι τυχαίες (δηλαδή αν υπάρχει κάποιο μοτίβο).
+
+Από την άλλη πλευρά, αν επιλέξουμε να εξαιρέσουμε εντελώς τη μεταβλητή AGE από το μοντέλο μας, τότε μπορούμε να διατηρήσουμε περισσότερες παρατηρήσεις. Αυτό είναι μπορεί να είναι θετικό διότι ενδεχομένως να οδηγήσει σε στατιστικά πιο σταθερά αποτελέσματα, ειδικά αν η μεταβλητή AGE δεν έχει ισχυρή συσχέτιση με τη μεταβλητή εξόδου του μοντέλου. Ωστόσο, υπάρχει και το ενδεχόμενο να χάσουμε πολύτιμη πληροφορία, αν η ηλικία του ακινήτου είναι ένας σημαντικός προβλεπτικός παράγοντας.
+
+Για να αποφασίσουμε αν η εξαίρεση της μεταβλητής AGE αλλάζει τα αποτελέσματα, μπορούμε να εκτελέσουμε την ανάλυσή μας δύο φορές: μία φορά με όλες τις μεταβλητές (και άρα με λιγότερες παρατηρήσεις) και μία χωρίς την μεταβλητή AGE (αλλά με περισσότερες παρατηρήσεις). Αν διαπιστώσουμε ότι τα αποτελέσματα δεν αλλάζουν σημαντικά, τότε ίσως να είναι προτιμότερο να την αφαιρέσουμε. Αν όμως υπάρχουν ουσιαστικές διαφοροποιήσεις, θα πρέπει να εξετάσουμε μεθόδους αντιμετώπισης των ελλιπών τιμών, όπως η πολλαπλή συμπλήρωση (multiple imputation).
+
+```{r missing-table, results='hide',echo=FALSE,fig.cap= "Ελλιπής τιμές",warning=FALSE}
+
+
+#collect missing values, for variables where missing values are greater than 0.
+missing_vals <- miss_var_summary(dataframe) %>%
+  filter(n_miss > 0) %>%
+  select(variable, n_miss, pct_miss)
+
+missing_tabl <- missing_vals %>%
+  gt() %>%
+  tab_header(title = "Πίνακας 3:Ελλιπής τιμές") %>%
+  fmt_number(columns = n_miss, decimals = 0) %>%
+  fmt_number(columns = pct_miss, decimals = 2) %>%
+  cols_label(
+    variable = "Μεταβλητή",
+    n_miss = "Ελλιπής τιμές",
+    pct_miss = "Ποσοστό"
+  )
+
+# Render  LaTeX
+knitr::asis_output(missing_tabl %>% as_latex())%>% cat()
+
+```
+
+Θα προβούμε στην μελέτη των ακραίων τιμών, διαγραμματικά και για καλύτερη κατανόηση οι τιμές αναδυκνύονται συνοπτικά στον παραπάνω πίνακα (βλ. πίνακα 3).
+
+Οι ακραίες τιμές μπορούν να είναι λάθη καταγραφής και σε αυτή την περίπτωση τα διορθώνουμε ή τα αφαιρούμε. Αν είναι σπάνιες αλλά πραγματικές τιμές, κρίνουμε ανάλογα με τον σκοπό της ανάλυσης. Αν επηρεάζουν σημαντικά τα αποτελέσματα ή «τραβούν» το μοντέλο προς μη ρεαλιστικές προβλέψεις, μπορεί να είναι απαραίτητο να τις εξαιρέσουμε.
+
+Εντοπίζοντας τις μεταβλητές που περιέχουν ακραίες τιμές και εξετάζοντάς τες σε σχέση με το συνολικό εύρος των τιμών, διαπιστώνουμε ότι όλες εμπίπτουν σε ρεαλιστικά πλαίσια. Για παράδειγμα, στη μεταβλητή PRICE, τιμές που προσεγγίζουν τα 2 εκατομμύρια θεωρούνται εύλογες στην πραγματική αγορά. Αντίστοιχα, και οι υπόλοιπες ποσοτικές μεταβλητές παρουσιάζουν τιμές που κρίνονται αποδεκτές. Συνεπώς, δεν κρίνεται απαραίτητο να εξαιρέσουμε τις ακραίες τιμές.
+
+```{r outliers,echo=FALSE, results='asis',warning=FALSE}
+library(dplyr)
+library(ggplot2)
+
+library(knitr)
+
+numeric_cols <- c("PRICE", "SQFT", "AGE", "TAX")
+
+# Function to extract outliers as character
+find_outliers <- function(x) {
+  q1 <- quantile(x, 0.25, na.rm = TRUE)
+  q3 <- quantile(x, 0.75, na.rm = TRUE)
+  iqr <- q3 - q1
+  lower <- q1 - 1.5 * iqr
+  upper <- q3 + 1.5 * iqr
+  outliers <- x[x < lower | x > upper]
+  as.character(outliers[!is.na(outliers)])
+}
+
+# Step 1: Get outliers for each column
+outlier_lists <- lapply(numeric_cols, function(col) find_outliers(dataframe[[col]]))
+names(outlier_lists) <- numeric_cols
+
+# Step 2: Find max length of outlier lists
+max_len <- max(sapply(outlier_lists, length))
+
+# Step 3: Pad each list with NA at the end
+outlier_lists_padded <- lapply(outlier_lists, function(vec) {
+  c(vec, rep("", max_len - length(vec)))
+})
+
+# Step 4: Combine into a proper data frame
+outlier_df <- as.data.frame(outlier_lists_padded, stringsAsFactors = FALSE)
+
+knitr::kable(outlier_df, format = "latex", caption = "Πίνακας ακραίων τιμών")
+
+
+
+
+```
+
+\section*{Σχέσεις ανά δύο}
+
+Κυριότερος στόχος είναι να διαπισώσουμε ποιοι παράγοντες επηρεάζουν την τελική τιμή πώλησης ακινήτων στην αγορά, προκειμένου να μπορέσουμε να προβλέψουμε τυχόν τιμές γνωρίζοντας κοποια χαρακτηριστικά σπιτιού. Για να επιτευχθεί ο στόχος αυτός θέτουμε ερωτήματα όπως; Η περιοχή προβλέπει την τιμή; Συσχετίζεται ο φόρος με την τιμή;Τα παλαιότερα σπίτια κοστίζουν λιγότερο; Από τα ερωτήματα που αφορούν την τιμή προκύπτουν οι παρακάτω σχέσεις, που πρέπει να μελετηθουν, δηλαδή πρέπει να εκτιμηθεί αν υπάρχει σχέση μεταξύ της ποσοτικής μεταβλητής-τιμής και κάθε άλλης τιμής παρούσας στο σετ δεδομένων.Παράλληλα όμως, θα εξεταστούν και τυχόν σχέσεις μεταξύ ποιοτικών μεταβλητών.Επιπλέον με βάση των , θα αναλυθεί πώς επηρεάζεται ο φόρος από το μέγεθος ακινήτου.
+
+\section*{{\large Σχέσεις προς μελέτη}}
+
+\begin{itemize}
+  \item Τιμή -- Τοποθεσία
+  \item Τιμή -- Εσωτερικό μέγεθος σπιτιού
+  \item Τιμή -- Χαρακτηριστικά
+  \item Τιμή -- Φόρος
+  \item Τιμή -- Ηλικία ακινήτου
+  \item Τιμή -- Πώληση στο παρελθόν
+  \item Φόρος -- Εσωτερικό μέγεθος σπιτιού
+\end{itemize}
+
+
+```{r pearson for numerical ,fig.cap="Boxplot τιμή - τοποθεσία", echo=FALSE, results='hide',warning=FALSE}
+cor.test(dataframe$PRICE, dataframe$SQFT, method = "pearson")
+cor.test(dataframe$PRICE, dataframe$TAX, method = "pearson")
+cor.test(dataframe$PRICE, dataframe$AGE, method = "pearson")
+```
+Σε κάθε ζεύγος μεταβλητών, εφαρμόστηκαν κατάλληλα tests συνοδευόμενα από διαγράμματα για οπτικοποίηση σχέσεων.
+Αναλυτικότερα, για να διαπιστώσουμε καλύτερα τις σχέσεις ποσοτικών μεταβλητών, χρησιμοποιήθηκε pearson correlation test. Το αποτέλεσμα έδειξε ότι η τιμή \textbf{PRICE} συσχετίζεται θετικά με το εσωτερικό μέγεθος σπιτιού \textbf{SQFT} και επίσης έχει ισχυρή θετική συσχετίση με τον ετήσιο φόρο \textbf{TAX}, για λεπτομέρειες συχέτισης βλ. σχήμα 5 στο Παράρτημα.
+
+Για την σχέση τιμής και χαρακτηριστικών χρησιμοποιήθηκε Kruskal Wallis test, διότι η μεταβλητή χαρακτηριστικά είναι πολυ επίπεδη, και ό έλεγχος συνοδεύεται από ραβδογράμματα. για λεπτομέρειες βλ. σχήμα 6 στο Παράρτημα.Παρατηρούμε ότι απορρίπτεται η μηδενική υπόθεση(p p-value = 0.001757< 0.05) αυτό υποδηλώνει ότι τα χαρακτηριστικά ακινήτων σχετίζονται με διαφορές στην τιμή.
+
+
+Για την σχέση τιμής και τοποθεσίας, χρησιμοποιήθηκε Wilcoxon εφόσον η μεταβλητή τοποθεσία αποτελεί μια δίτιμη μεταβλητή και η προϋποθεση κανονικότητας απορρίπτεται και για τις 2 τιμές 0 και 1(p-value = 0.0001416 και p-value = 5.789e-07). Το αποτέλεσμα δείχνει την απουσία καποιας σχέσης μεταξύ των συγκεκριμένων μεταβλητών,για λεπτομέρειες συχέτισης βλ. σχήμα 4 στο Παράρτημα.
+
+Για την σχέση τιμής και γεγονότος πώλησης στο παρελθόν, επαναλήφθηκε η ίδια διαδικασία και το αποτέλεσμα του Wilcoxon ( p-value = 0.8044) έδειξε ότι δεν υπάρχει κάποια σχέση μεταξύ τιμής και του γεγονότος ότι πουλήθηκε/ δεν πουλήθηκε το ακίνητο στο παρελθόν, για λεπτομέρειες συχέτισης βλ. σχήμα 8 στο Παράρτημα. 
+
+΄Εχοντας κάνει τους απαραίτητους ελέγχους εμηνεύσει και τα αντίστοιχα διαγράμματα καταλήγουμε ότι οι σημαντικόερες σχέσεις που ενδέχεται να μοντελοποιούν την τιμή και μπορούν να μελετηθούν περεταίρω είναι:
+
+
+\begin{itemize}
+  \item Τιμή -- Εσωτερικό μέγεθος σπιτιού
+  \item Τιμή -- Χαρακτηριστικά
+  \item Τιμή -- Φόρος
+\end{itemize}
+
+
+
+
+
+```{r cor table2,echo=FALSE,warning=FALSE}
+library(psych)
+library(knitr)
+
+numerics <- dataframe[, c("PRICE", "SQFT", "TAX")]
+
+# Compute correlation and p-values
+res <- corr.test(numerics, use = "pairwise.complete.obs", adjust = "none")
+cor <- round(res$r, 3)
+p <- res$p
+
+# Build formatted matrix (lower triangle only)
+table <- matrix("", nrow = nrow(cor), ncol = ncol(cor),
+                dimnames = dimnames(cor))
+
+for (i in 2:nrow(cor)) {
+  for (j in 1:(i - 1)) {
+    p_single <- ifelse(p[i, j] < 0.001, "< .001", paste0("= ", round(p[i, j], 3)))
+    table[i, j] <- paste0(cor[i, j], " (", p_single, ")")
+  }
+}
+
+# Display table with proper LaTeX styling
+kable(table, caption = "Pearson correlation matrix with p-values", booktabs = TRUE)
+
+```
+
+Όσον αφορά την μεταβλητή TAX (ετήσιος φόρος) παρουσιάζει ισχυρή γραμμική συσχέτιση τόσο με την τιμή αγοράς της κατοικίας (PRICE) όσο και με το εμβαδόν του ακινήτου (SQFT). Όπως φάνηκε στα αντίστοιχα διαγράμματα (για λεπτομέρειες συσχέτισης βλ. πίνακες Α4 και Α5 στο Παράρτημα), η αύξηση της τιμής συνδέεται με αντίστοιχη αύξηση του ετήσιου φόρου, γεγονός που υποδηλώνει ότι ο φόρος αντανακλά τη συνολική αξία της ακίνητης περιουσίας. Παράλληλα, διαπιστώνεται ότι και το εμβαδόν του ακινήτου επηρεάζει θετικά τον φόρο, γεγονός αναμενόμενο, καθώς μεγαλύτερα ακίνητα τείνουν να έχουν υψηλότερη αγοραία αξία και, συνεπώς, μεγαλύτερη φορολογική επιβάρυνση.Τα αποτελέσματα αυτά καθιστούν τη μεταβλητή TAX ιδιαίτερα χρήσιμη στην πρόβλεψη ή την κατηγοριοποίηση ακινήτων με βάση χαρακτηριστικά που σχετίζονται με την αγορά, 
+
+\section*{Προβλεπτικά ή Ερμηνευτικά μοντέλα}
+
+Οι ανωτέρω έλεγχοι μας καθοδήγησαν στην επιλογή των μεταβλητών που επηρεάζουν καθοριστικά την τιμή ενός ακινήτου. Στη συνέχεια, προχωρούμε στην κατασκευή στατιστικού μοντέλου πρόβλεψης της αξίας μεταπώλησης κατοικιών, το οποίο θα βασιστεί στις πλέον σημαντικές μεταβλητές. Σκοπός είναι η ακριβής αποτύπωση της αξίας μέσω του μοντέλου. Ωστόσο, σε πρώτη φάση, κατασκευάζουμε το μοντέλο έτσι ώστε να περιέχει όλες τις μεταβλητές και βλέπουμε αν τηρούνται οι υποθέσεις για την εκτέλεση πολλαπλής παλινδρόμησης.
+
+
+
+```{r mul-reg model1,echo=FALSE, results='hide',warning=FALSE}
+model <- lm(PRICE ~ SQFT + FEATS + AREA + AGE + TAX + COR + RESALE, data = dataframe)
+summary(model)
+```
+Για την προϋποθεση κανονικότητας χρησιμοποιήθηκε ο έλεγχος κανονικότητας Shapiro–Wilk (W = 0.966, p = 0.065) δεν έδειξε στατιστικά σημαντική απόκλιση από την κανονικότητα.
+Συνεπώς, τα κατάλοιπα του μοντέλου κατανέμονται περίπου κανονικά.
+
+```{r residuals normality,echo=FALSE, results='hide',warning=FALSE}
+shapiro.test(resid(model))
+
+```
+
+```{r residuals levene,echo=FALSE, results='hide',warning=FALSE}
+qfits <- cut(fitted(model), 
+             breaks = quantile(fitted(model), probs = seq(0, 1, 0.25), na.rm = TRUE), 
+             include.lowest = TRUE)
+
+leveneTest(resid(model), qfits)
+
+```
+
+Το διάγραμμα καταλοίπων έναντι των προσαρμοσμένων τιμών δεν παρουσίασε μοτίβο μεταβαλλόμενης διασποράς, κάτι που υποστηρίζει την παραδοχή της ομοσκεδαστικότητας (ίσης διασποράς σφαλμάτων),για λεπτομέρειες βλ. σχήμα 10 στο Παράρτημα.
+
+Ωστόσο, η εφαρμογή στατιστικού έλεγχου Levene Το αποτέλεσμα του ελέγχου έδειξε ότι τα κατάλοιπα δεν εμφανίζουν σταθερή διασπορά, γεγονός που αποτελεί ένδειξη ετεροσκοεδαστικότητας (F = 6.0347, p = 0.001129),απορρίπτεται η μηδενικής υπόθεσης,άρα τα κατάλοιπα δεν εμφανίζουν σταθερή διασπορά.Η παρουσία ετεροσκεδαστικότητας μπορεί να οδηγήσει σε αναξιόπιστες εκτιμήσεις.
+
+
+```{r residuals levene retest,echo=FALSE, results='hide',warning=FALSE}
+model_log <- lm(log(PRICE) ~ SQFT + FEATS + AREA + AGE + TAX + COR + RESALE,
+                data = dataframe)
+
+summary(model_log)
+
+
+library(car)
+
+qfits_log <- cut(fitted(model_log),
+                 breaks = quantile(fitted(model_log), probs = seq(0, 1, 0.25), na.rm = TRUE),
+                 include.lowest = TRUE)
+
+leveneTest(resid(model_log), qfits_log)
+
+
+```
+
+Για την αντιμετώπιση του ζητήματος, εφαρμόστηκε λογαριθμικός μετασχηματισμός στην εξαρτημένη μεταβλητή \texttt{PRICE}, με σκοπό τη σταθεροποίηση της διασποράς και την ενίσχυση της κανονικότητας των καταλοίπων.
+
+
+
+Το νέο μοντέλο εκτιμήθηκε με τη μορφή:
+
+\[
+\log(\texttt{PRICE}) \sim \texttt{SQFT} + \texttt{FEATS} + \texttt{AREA} + \texttt{AGE} + \texttt{TAX} + \texttt{COR} + \texttt{RESALE}
+\]
+
+Μετά τον μετασχηματισμό, ο έλεγχος Levene επαναλήφθηκε(F = 2.0173, p = 0.1207), γεγονός που δηλώνει ότι δεν υπάρχει στατιστικά σημαντική διαφορά στις διασπορές των καταλοίπων μεταξύ των ομάδων. Συνεπώς, η υπόθεση ομοιοσκεδαστικότητας \textbf{δεν απορρίπτεται} και η υπόθεση ισότητας διασποράς μπορεί πλέον να θεωρηθεί ικανοποιημένη.
+
+Ακολουθεί ο έλεγχος ανεξαρτησίας κατάλοιπων Durbin–Watson (D–W = 1.93 με p = 0.52)
+Συνεπώς, δεν υπάρχει στατιστικά σημαντική αυτοσυσχέτιση των σφαλμάτων, και η υπόθεση της ανεξαρτησίας ικανοποιείται.
+```{r residuals independency,echo=FALSE, results='hide',warning=FALSE}
+
+library(car)
+
+durbinWatsonTest(model)
+
+```
+Αφού επιβεβαιώθηκε η εγκυρότητα του μοντέλου ως προς τις βασικές υποθέσεις της γραμμικής παλινδρόμησης (Κανονικότητα, Ομοσκεδαστικότητα, Ανεξαρτησία)
+προχωρούμε στην επόμενη φάση του εντοπισμού των σημαντικότερων μεταβλητών που επηρεάζουν την τιμή μεταπώλησης, και τη δημιουργία ενός ισχυρού και απλού μοντέλου παλινδρόμησης.
+
+Αρχικά θα επαληθεύσουμε το γεγονός ότι οι μεταβλητές Χαρακτηριστικά, Φόρος και Εσωτερικό μέγεθος σπιτιού όντως μπορούν να αποτελέσουν το μοντέλο πολλαπλής παλινδρόμησης.Ο έλεγχος θα επιτευχθεί με σταδιακή προσθήκη των τριών μεταβλητών. και ταυτόχρονα μελετηθεί η συμπεριφορά του μοντέλου ως προς τις διαθέσιμες μεταβλητές.
+
+Παρατηρούμε ότι το μοντέλο εξηγεί το 86,2% της διακύμανσης στις τιμές μεταπώλησης.
+
+```{r clean,echo=FALSE, results='hide',warning=FALSE}
+dataframe_clean <- na.omit(dataframe)
+
+```
+
+
+```{r mul-reg 1,echo=FALSE, results='hide',warning=FALSE}
+model1 <- lm(log(PRICE) ~ SQFT, data = dataframe_clean )
+summary(model1, type = 2)
+
+anova(model1)
+
+```
+
+```{r mul-reg 2,echo=FALSE, results='hide',warning=FALSE}
+library(car)
+model2 <- lm(log(PRICE) ~ SQFT + FEATS, data = dataframe_clean)
+summary(model2)
+
+Anova(model1, model2,type = 2)
+
+```
+
+
+```{r mul-reg 3,echo=FALSE, results='hide',warning=FALSE}
+library(car)
+model3 <- lm(log(PRICE) ~ SQFT + FEATS + TAX, data = dataframe_clean)
+summary(model3)
+
+Anova(model2, model3, type = 2)
+```
+Ο συντελεστής της μεταβλητής \texttt{TAX} βρέθηκε στατιστικώς σημαντικός ($\beta = 3.91 \times 10^{-4}$, $p = 0.000372$), υποδεικνύοντας ότι η φορολογία σχετίζεται θετικά και σημαντικά με τη λογαριθμισμένη τιμή του ακινήτου. Επιπλέον, η ανάλυση διακύμανσης τύπου ΙΙ επιβεβαίωσε τη σημαντική συμβολή της \texttt{TAX} στο υπόδειγμα ($F = 14.17$, $p = 0.00037$). 
+Ως αρχικό βήμα, εκτιμήθηκε γραμμικό μοντέλο με λογαριθμισμένη εξαρτημένη μεταβλητή \texttt{log(PRICE)} και την\texttt{SQFT}.Διαπιστώθηκε ότι η μεταβλητή \textbf{SQFT} (τετραγωνικά μέτρα) είναι στατιστικά σημαντική ($p < 2 \times 10^{-16}$) και εξηγεί περίπου το 80% της διακύμανσης στην τιμή ($R^2 = 0.8045$). Με την προσθήκη της μεταβλητής \textbf{FEATS}, το $R^2$ αυξήθηκε ελάχιστα ($R^2 = 0.8065$), επίσης η ίδια η μεταβλητή δεν είναι στατιστικά σημαντική ($p = 0.425$),το τεστ ANOVA τύπου II το επιβεβαίωσε ($F(1, 63) = 261.93$ με $p < 2 \times 10^{-16}$). Αντιθέτως, στο τρίτο μοντέλο, η προσθήκη της μεταβλητής \textbf{TAX} οδήγησε σε αισθητή βελτίωση($R^2 = 00.8425$), ενώ η \textbf{TAX} παρουσίασε στατιστική σημαντικότητα ($p = 0.000372$), με από ANOVA τύπου II ($F = 14.17$, $p = 0.00037$). Η \textbf{FEATS} παρέμεινε μη σημαντική και σε αυτό το μοντέλο. Συνεπώς, καταλήγουμε στο συμπέρασμα ότι οι μεταβλητές \textbf{SQFT} και \textbf{TAX} αποτελούν τους καταλληλότερους προβλεπτικούς παράγοντες για την τιμή ακινήτου, βάσει της υψηλής προσαρμοστικής ικανότητας του μοντέλου και της στατιστικής σημαντικότητας που επιβεβαιώνεται τόσο από τα αποτελέσματα των συντελεστών όσο και από την ανάλυση διακύμανσης.
+
+```{r mul-reg 4,echo=FALSE, results='hide',warning=FALSE}
+model4 <- lm(log(PRICE) ~ SQFT + TAX + AGE, data = dataframe_clean)
+summary(model4)
+Anova(model3, model4, type = 2)
+
+```
+
+
+```{r mul-reg 5,echo=FALSE, results='hide',warning=FALSE}
+model5 <- lm(log(PRICE) ~ SQFT + FEATS + TAX + AGE + AREA, data = dataframe_clean)
+summary(model5)
+Anova(model4,model5, type = 2)
+```
+
+
+```{r mul-reg 6,echo=FALSE, results='hide',warning=FALSE}
+model6<- lm(log(PRICE) ~ SQFT + FEATS + TAX + AGE + AREA + COR, data = dataframe_clean)
+summary(model6)
+Anova(model5,model6, type = 2)
+```
+
+
+```{r mul-reg 7,echo=FALSE, results='hide',warning=FALSE}
+model7 <- lm(log(PRICE) ~ SQFT + FEATS + TAX + AGE + AREA + COR + RESALE, data = dataframe_clean)
+summary(model7)
+Anova(model6,model7, type = 2)
+```
+
+Προσθήκη της μεταβλητής AGE στο μοντέλο
+
+Συνεχίζοντας την διαδικασία πρόσθεσης μεταβλητών, εξετάζουμε την επίδραση μεταβλητής \textbf{AGE} στο προηγούμενο μοντέλο.Δεν φαίνεται στατιστικά σημαντική, συγκεκριμένα($p = 0.2939$).Παρουσιάζει επίσης μια ελάχιστη αύξηση ($R^2 = 0.843$).Επομένως δεν μπορούμε να συμπεριλάβουμε την συγκεκριμένη μεταβλητή, δεν ενισχύει ουσιαστικά το προβλεπτικό μοντέλο, γεγονός που αποδεικνύεται και από ANOVA τύπου II.
+
+Προσθήκη της μεταβλητής AREA στο μοντέλο
+
+Προσθέτουμε τη μεταβλητή \textbf{AREA} στο υπάρχον μοντέλο. Η μεταβλητή αυτή δεν αναδεικνύεται στατιστικά σημαντική, καθώς η τιμή-$p$ είναι αρκετά υψηλή ($p = 0.7567$). Η προσθήκη της συνοδεύεται από μια αμελητέα αύξηση του συντελεστή προσδιορισμού ($R^2 = 0.8446$).Συνεπώς, η μεταβλητή \textbf{AREA} δεν ενισχύει ουσιαστικά το προβλεπτικό μοντέλο, όπως επιβεβαιώνεται και από τα αποτελέσματα της ανάλυσης διασποράς τύπου II (ANOVA).
+
+Προσθήκη της μεταβλητής COR στο μοντέλο
+
+Στο επόμενο στάδιο της ανάλυσης προστίθεται η μεταβλητή \textbf{COR} στο υπάρχον μοντέλο. Η προσθήκη της \textbf{COR} οδήγησε σεμικρή αλλά αξιοσημείωτη αύξηση στον συντελεστή προσδιορισμού ($R^2 = 0.859$).Η \textbf{COR} είναι στατιστικά σημαντική ($p = 0.0173$).Συμπεράνουμε ότι η \textbf{COR} συνεισφέρει στη βελτίωση του μοντέλου πρόβλεψης, κάτι που επιβεβαιώνεται και από τα αποτελέσματα της ανάλυσης διασποράς τύπου II (ANOVA), όπου παρατηρείται επίσης στατιστικά σημαντική επίδραση ($p = 0.0173$).
+
+
+Προσθήκη της μεταβλητής RESALE στο τελικό μοντέλο}
+
+Στο τελικό στάδιο της ανάλυσης εξετάστηκε η μεταβλητή \textbf{RESALE}, η οποία προστέθηκε στο ήδη εκτεταμένο μοντέλο με τις μεταβλητές \textbf{SQFT}, \textbf{TAX}, \textbf{AGE}, \textbf{AREA}, \textbf{COR} και \textbf{FEATS}. Η μεταβλητή αυτή δεν παρουσιάζει στατιστική σημαντικότητα, καθώς η τιμή-$p$ είναι $0.1812$, δηλαδή αρκετά υψηλότερη από το αποδεκτό όριο σημαντικότητας. Η προσθήκη της οδηγεί σε οριακή αύξηση στον συντελεστή προσδιορισμού ($R^2 = 0.8633$), η οποία δεν είναι αρκετή ώστε να δικαιολογήσει τη διατήρησή της στο μοντέλο.Συνεπώς, η μεταβλητή αυτή δεν ενισχύει το προβλεπτικό μοντέλο.
+
+
+```{r mul-reg final model,echo=FALSE, results='hide',warning=FALSE}
+final_model = lm(log(PRICE) ~ SQFT + TAX + COR, data = dataframe_clean)
+summary(final_model)
+
+```
+Η τελική μορφή του μοντέλου περιλαμβάνει τις μεταβλητές \textbf{SQFT} (τετραγωνικά μέτρα), \textbf{TAX} (φόρος) και \textbf{COR} (ένδειξη γωνιακού οικοπέδου), καθώς αποδείχθηκαν στατιστικά σημαντικές για την πρόβλεψη της τιμής του ακινήτου (\textit{PRICE}). Το τελικό μοντέλο εμφανίζει υψηλή προσαρμοστικότητα, με προσαρμοσμένο συντελεστή προσδιορισμού $R^2_{\text{adj}} = 0.8483$, γεγονός που σημαίνει ότι εξηγεί το 84.8\% της διακύμανσης στο μοντέλο.Όλοι οι συντελεστές είναι στατιστικά σημαντικοί.
+
+\subsection*{Εξίσωση Τελικού Μοντέλου}
+
+\begin{equation}
+\log(\text{PRICE}) = 6.124 + 0.0003011 \cdot \text{SQFT} + 0.0003852 \cdot \text{TAX} + 0.1030 \cdot \text{COR}
+\end{equation}
+
+\section*{Συμπεράσματα και συζήτηση}
+
+Καταλήξαμε στην ανάπτυξη ενός ικανοποιητικού μοντέλου και σημαντικό είναι το γεγονός ότι έχει ισχυρή προβλεπτική ικανότητα.Ιδιαίτερα σημαντικό είναι ότι το μοντέλο διατηρεί απλότητα, κάνοντας χρήση μόλις τριών από τις έξι διαθέσιμων μεταβλητών, γεγονός που το καθιστά εύχρηστο και ερμηνεύσιμο. Υπάρχει περιθώριο περαιτέρω διερεύνησης και βελτιστοποίησης. Μελλοντικές επεκτάσεις θα μπορούσαν να εξετάσουν την ενσωμάτωση πρόσθετων μεταβλητών, τη χρήση μη γραμμικών μοντέλων ή τεχνικών μηχανικής μάθησης, προκειμένου να ενισχυθεί η ακρίβεια και η γενικευσιμότητα του μοντέλου σε ευρύτερα δείγματα δεδομένων.
+
+
+
+
+
+
+\section*{Ευρετήριο Πινάκων και διαγραμμάτων}
+
+```{r histograms,echo=FALSE, fig.cap="Ιστογράμματα Ποσοτικών Μεταβλητών", out.width="80%", fig.align='center',warning=FALSE}
+
+library(showtext)
+
+font_add("TNR", "C:/Windows/Fonts/times.ttf")  # adjust path if needed
+showtext_auto()
+# Set 1 row/ 3 cols
+par(mfrow = c(1, 3))
+
+# Histogram for PRICE
+hist(dataframe$PRICE, main = "Τιμή Σπιτιού", xlab = "τιμή", ylab = "Συχνότητα", col = "skyblue", border = "white")
+
+# Histogram for SQFT
+hist(dataframe$SQFT, main = "Μέγεθος σπιτιού", xlab = "sqft", ylab = "", col = "skyblue", border = "white")
+
+# Histogram for TAX
+hist(dataframe$TAX, main = "Ετήσιος φόρος", xlab = "φόρος", ylab = "", col = "skyblue", border = "white")
+```
+
+```{r categorical bar charts,echo=FALSE, fig.cap="Bar chart ποιοτικών μεταβλητών", out.width="80%", fig.align='center',warning=FALSE}
+
+par(mfrow = c(2, 2))  
+
+barplot(table(dataframe$FEATS), 
+        main = "FEATS", col = "skyblue", xlab = "Category", ylab = "Count")
+
+barplot(table(dataframe$AREA), 
+        main = "AREA", col = "skyblue", xlab = "Category", ylab = "Count")
+
+barplot(table(dataframe$COR), 
+        main = "COR", col = "skyblue", xlab = "Category", ylab = "Count")
+
+barplot(table(dataframe$RESALE), 
+        main = "RESALE", col = "skyblue", xlab = "Category", ylab = "Count")
+
+```
+
+```{r age-barplot,echo=FALSE, fig.cap="Διάγραμμα Κατηγορίας Ηλικίας", out.width="80%", fig.align='center',warning=FALSE}
+
+library(showtext)
+
+library(ggplot2)
+font_add("TNR", "C:/Windows/Fonts/times.ttf")  # adjust path if needed
+showtext_auto()
+# Create categorical AGE variable
+
+# converting age column to character to collect missing values
+dataframe$AGE_categorical <- as.character(dataframe$AGE)
+dataframe$AGE_categorical[is.na(dataframe$AGE_categorical)] <- "Άγνωστες"
+
+# convert ages to numeric to sort in increasing order
+AGE_numeric <- sort(as.numeric(na.omit(dataframe$AGE)))
+AGE_character <- c(as.character(AGE_numeric), "Άγνωστες")
+# remove duplicates
+AGE_character <- unique(AGE_character)
+dataframe$AGE_categorical <- factor(dataframe$AGE_categorical, levels = AGE_character)
+
+# Plot with Greek labels and Times New Roman
+ggplot(dataframe, aes(x = AGE_categorical)) +
+  geom_bar(fill = "skyblue") +
+  labs(title = "Ηλικία Σπιτιού", x = "Ηλικία", y = "") +
+  theme_minimal(base_family =  "sans") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 8))
+```
+
+
+
+```{r wilcox ,fig.cap="Boxplot τιμή - τοποθεσία", echo=FALSE, results='hide',warning=FALSE}
+wilcox.test(PRICE ~ AREA, data = dataframe)
+```
+
+```{r price-location,fig.cap="Boxplot τιμή - τοποθεσία", echo=FALSE, results='asis',warning=FALSE}
+library(ggplot2)
+
+font_add("TNR", "C:/Windows/Fonts/times.ttf")  # adjust path if needed
+showtext_auto()
+
+ggplot(dataframe, aes(x = factor(AREA), y = PRICE)) +
+  geom_boxplot(fill = c("gray80", "skyblue")) +
+  labs(
+    title = "",
+    x = "Περιοχή",
+    y = "Τιμή (σε Χιλιάδες)"
+  ) +
+  scale_x_discrete(labels = c("Άλλη", "ΒΑ")) +
+  theme_minimal(base_family = "TNR")
+```
+
+
+```{r normality ,fig.cap="Boxplot τιμή - τοποθεσία", echo=FALSE, results='hide',warning=FALSE}
+shapiro.test(dataframe$PRICE[dataframe$AREA == 0])
+shapiro.test(dataframe$PRICE[dataframe$AREA == 1])
+```
+
+
+
+```{r price-sqft,fig.cap="Scatterplot τιμή - εσωτερικό μέγεθος σπιτιού", fig.width=4.5,fig.height=2.5,echo=FALSE, results='asis',warning=FALSE}
+library(ggplot2)
+
+ggplot(dataframe, aes(x = SQFT, y = PRICE)) +
+  geom_point(color = "steelblue", size = 2, alpha = 0.7) +
+  geom_smooth(method = "lm", se = TRUE, color = "darkred") +
+  labs(
+    title = "",
+    x = "Τετραγωνικά Πόδια",
+    y = "Τιμή σε Χιλιάδες"
+  ) +
+  theme_minimal(base_family = "Times New Roman")
+```
+
+
+
+```{r kruskal, echo=FALSE, results='hide',message=FALSE, warning=FALSE, fig.cap="Σχέση τιμής και αριθμού χαρακτηριστικών", out.width="80%", fig.align='center'}
+kw <- kruskal.test(PRICE ~ factor(FEATS), data = dataframe)
+print(kw)
+```
+
+
+
+```{r price-feats, echo=FALSE, message=FALSE, warning=FALSE, fig.cap="Σχέση τιμής και αριθμού χαρακτηριστικών", out.width="80%", fig.align='center'}
+library(ggplot2)
+
+ggplot(dataframe, aes(x = factor(FEATS), y = PRICE)) +
+  geom_boxplot(fill = "skyblue", outlier.color = "red") +
+  labs(
+    title = "",
+    x = "Αριθμός Χαρακτηριστικών",
+    y = "Τιμή σε Χιλιάδες"
+  ) +
+  theme_minimal(base_family = "Times New Roman") +
+  theme(axis.text.x = element_text(angle = 0, size = 10))
+```
+
+
+```{r price-tax,fig.cap="Scatterplot ττιμή - φόρος", fig.width=4.5,fig.height=2.5,echo=FALSE, results='asis',warning=FALSE}
+library(ggplot2)
+
+ggplot(dataframe, aes(x = TAX, y = PRICE)) +
+  geom_point(color = "steelblue", size = 2, alpha = 0.7) +
+  geom_smooth(method = "lm", se = TRUE, color = "darkred") +
+  labs(
+    title = "",
+    x = "Ετήσιος φόρος",
+    y = "Τιμή σε Χιλιάδες"
+  ) +
+  theme_minimal(base_family = "Times New Roman")
+```
+
+
+
+
+```{r normality resale, echo=FALSE, results='hide',warning=FALSE}
+shapiro.test(dataframe$RESALE [dataframe$AREA == 0])
+shapiro.test(dataframe$RESALE [dataframe$AREA == 1])
+```
+
+```{r wilcox, echo=FALSE, results='hide', warning=FALSE}
+wilcox.test(PRICE ~ RESALE, data = dataframe)
+```
+
+```{r price-resale ,fig.cap="Boxplot τιμή - πώληση στο παρελθόν ", echo=FALSE, results='asis',warning=FALSE}
+library(ggplot2)
+
+font_add("TNR", "C:/Windows/Fonts/times.ttf")  # adjust path if needed
+showtext_auto()
+
+ggplot(dataframe, aes(x = factor(RESALE), y = PRICE)) +
+  geom_boxplot(fill = c("gray80", "skyblue")) +
+  labs(
+    title = "",
+    x = "πώληση στο παρελθόν",
+    y = "Τιμή (σε Χιλιάδες)"
+  ) +
+  scale_x_discrete(labels = c("Οχι", "Ναι")) +
+  theme_minimal(base_family = "TNR")
+```
+
+
+```{r residual qq plot ,fig.cap="Κανονικότητα κατάλοιπων", echo=FALSE, results='asis',warning=FALSE}
+#  Q-Q plot
+plot(model, which = 2)  
+
+
+```
+
+
+
+```{r residuals homoscedasticity,fig.cap=" Κατάλοιπα και Προσαρμοσμένες Τιμές",echo=FALSE,fig.width=4.5,fig.height=2.5, results='hide',warning=FALSE}
+
+
+font_add("TNR", "C:/Windows/Fonts/times.ttf")  # adjust path if needed
+showtext_auto()
+
+plot_title <- "Κατάλοιπα και Προσαρμοσμένες Τιμές"
+
+ggplot(model, aes(.fitted, .resid)) +
+  geom_point() +
+  geom_smooth(method = "loess", se = FALSE, color = "red", linewidth = 0.5) +
+  geom_hline(yintercept = 0, linetype = "dotted") +
+  labs(title='',x = "Προσαρμοσμένες Τιμές", y = "Κατάλοιπα") +
+  ggtitle(plot_title) +
+  theme(plot.title = element_text(size = 20)+
+  theme_minimal(base_size = 11))
+
+
+```
